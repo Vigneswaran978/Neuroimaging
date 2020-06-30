@@ -1,0 +1,387 @@
+
+from sklearn.model_selection import train_test_split
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, Dropout
+from tensorflow.keras import layers
+from kerastuner.tuners import RandomSearch
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.utils import Sequence
+
+from sklearn.metrics import mean_absolute_error
+from math import sqrt
+from sklearn.metrics import r2_score
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.compose import make_column_transformer
+
+from keras.models import load_model
+
+from tensorflow.keras.utils import Sequence
+from keras.models import load_model
+
+from math import sqrt
+from sklearn.metrics import r2_score
+
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.compose import make_column_transformer
+from sklearn.metrics import mean_absolute_error
+from sklearn.impute import KNNImputer
+from sklearn.utils import resample
+from sklearn.metrics import classification_report
+import pickle
+
+
+# useful functions
+
+def plot_mape(history):
+    hist = pd.DataFrame(history.history)
+    hist['epoch'] = history.epoch
+
+    plt.figure()
+    plt.xlabel('Epoch')
+    plt.ylabel('mean_absolute_percentage_error')
+    plt.plot(hist['epoch'], hist['mean_absolute_percentage_error'],
+             label='Train MeanAbsolutePercentageError')
+    plt.plot(hist['epoch'], hist['val_mean_absolute_percentage_error'],
+             label='Val mean_absolute_percentage_error')
+    plt.legend()
+    plt.show()
+
+
+def plot_acc(history):
+    hist = pd.DataFrame(history.history)
+    hist['epoch'] = history.epoch
+
+    plt.figure()
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.plot(hist['epoch'], hist['accuracy'],
+             label='Train Accuracy')
+    plt.plot(hist['epoch'], hist['val_accuracy'],
+             label='Val accuracy')
+    plt.legend()
+    plt.show()
+
+
+# Func to check MAPE
+def mean_absolute_percentage_error(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    return np.mean(np.abs((y_true - y_pred) / y_true))
+
+
+MAIN_DATA_PATH = 'D:/neuro/'
+
+# The first set of features are source-based morphometry (SBM) loadings. These are subject-level weights from
+# a group-level ICA decomposition of gray matter concentration maps from structural MRI (sMRI) scans.
+
+loading_df = pd.read_csv(
+    MAIN_DATA_PATH + 'loading.csv')  # loading.csv - sMRI SBM loadings for both train and test samples
+
+print(loading_df.shape)
+print(loading_df.shape[0] / 2)
+
+# The second set are static functional network connectivity (FNC) matrices. These are the subject-level cross-correlation
+# values among 53 component timecourses estimated from GIG-ICA of resting state functional MRI (fMRI).
+
+fnc_df = pd.read_csv(
+    MAIN_DATA_PATH + 'fnc.csv')  # fnc.csv - static FNC correlation features for both train and test samples
+
+print(fnc_df.shape)
+
+# The third set of features are the component spatial maps (SM). These are the subject-level 3D images of 53 spatial networks
+# estimated from GIG-ICA of resting state functional MRI (fMRI).
+
+icn_numbers_df = pd.read_csv(MAIN_DATA_PATH + 'ICN_numbers.csv')
+
+# ICN_numbers.csv - intrinsic connectivity network numbers for each fMRI spatial map; matches FNC names
+
+print(icn_numbers_df.shape)
+
+# train_scores.csv - age and assessment values for train samples
+
+train_scores_df = pd.read_csv(MAIN_DATA_PATH + 'train_scores.csv')
+
+train_scores_df.isna().sum()
+
+train_scores_df['is_train_set'] = 'yes'
+
+print(train_scores_df.shape)
+
+# fnc_features, loading_features = list(fnc_df.columns[1:]), list(loading_df.columns[1:])
+
+df = fnc_df.merge(loading_df, on="Id")
+
+df = df.merge(train_scores_df, on="Id", how="left")
+
+train_df = df[df["is_train_set"] == 'yes']
+
+df.isnull().sum()
+train_df.isnull().sum()
+
+
+
+train_ids = train_df[['Id']]
+train_ids = train_ids.reset_index()
+
+train_df = train_df.drop(['is_train_set', 'Id'], axis=1)
+
+train_col = train_df.columns
+
+print(train_col)
+
+# train_df = train_df.dropna()
+train_df.isnull().sum()
+
+imputer = KNNImputer(n_neighbors=5)
+train_df = imputer.fit_transform(train_df)
+
+train_df = pd.DataFrame(train_df)
+train_df.columns = train_col
+
+train_df['Id'] = train_ids.Id
+
+train_df.isnull().sum()
+
+# Columns that are sensitive to site
+
+dim_red = ['IC_20']
+
+# Preparing actual test set
+
+target_cols = ['age', 'domain1_var1', 'domain1_var2', 'domain2_var1', 'domain2_var2']
+
+test_df = df[df['is_train_set'] != 'yes']
+
+test_ids = test_df[["Id"]]
+
+test_ids = test_df.reset_index()
+
+actual_test = test_df.drop(target_cols, axis=1)
+actual_test = actual_test.drop(['Id', 'is_train_set'], axis=1)
+actual_test = actual_test.drop(dim_red, axis=1)
+
+X = train_df.drop(target_cols, axis=1)
+X = X.drop('Id', axis=1)
+X = X.drop(dim_red, axis=1)
+
+y = train_df[['age', 'domain1_var1', 'domain1_var2', 'domain2_var1', 'domain2_var2']]
+
+y1 = np.array(y.age, dtype='float64')
+y2 = np.array(y.domain1_var1, dtype='float64')
+y3 = np.array(y.domain1_var2, dtype='float64')
+y4 = np.array(y.domain2_var1, dtype='float64')
+y5 = np.array(y.domain2_var2, dtype='float64')
+
+X1_train, X1_test, y1_train, y1_test = train_test_split(X, y1, test_size=0.05)
+
+
+
+
+# useful functions
+
+def plot_mape(history):
+    hist = pd.DataFrame(history.history)
+    hist['epoch'] = history.epoch
+
+    plt.figure()
+    plt.xlabel('Epoch')
+    plt.ylabel('mean_absolute_percentage_error')
+    plt.plot(hist['epoch'], hist['mean_absolute_percentage_error'],
+             label='Train MeanAbsolutePercentageError')
+    plt.plot(hist['epoch'], hist['val_mean_absolute_percentage_error'],
+             label='Val mean_absolute_percentage_error')
+    plt.legend()
+    plt.show()
+
+
+def plot_acc(history):
+    hist = pd.DataFrame(history.history)
+    hist['epoch'] = history.epoch
+
+    plt.figure()
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.plot(hist['epoch'], hist['accuracy'],
+             label='Train Accuracy')
+    plt.plot(hist['epoch'], hist['val_accuracy'],
+             label='Val accuracy')
+    plt.legend()
+    plt.show()
+
+
+# Func to check MAPE
+def mean_absolute_percentage_error(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    return np.mean(np.abs((y_true - y_pred) / y_true))
+
+
+MAIN_DATA_PATH = 'D:/neuro/'
+
+# The first set of features are source-based morphometry (SBM) loadings. These are subject-level weights from
+# a group-level ICA decomposition of gray matter concentration maps from structural MRI (sMRI) scans.
+
+loading_df = pd.read_csv(
+    MAIN_DATA_PATH + 'loading.csv')  # loading.csv - sMRI SBM loadings for both train and test samples
+
+print(loading_df.shape)
+print(loading_df.shape[0] / 2)
+
+# The second set are static functional network connectivity (FNC) matrices. These are the subject-level cross-correlation
+# values among 53 component timecourses estimated from GIG-ICA of resting state functional MRI (fMRI).
+
+fnc_df = pd.read_csv(
+    MAIN_DATA_PATH + 'fnc.csv')  # fnc.csv - static FNC correlation features for both train and test samples
+
+print(fnc_df.shape)
+
+# The third set of features are the component spatial maps (SM). These are the subject-level 3D images of 53 spatial networks
+# estimated from GIG-ICA of resting state functional MRI (fMRI).
+
+icn_numbers_df = pd.read_csv(MAIN_DATA_PATH + 'ICN_numbers.csv')
+
+# ICN_numbers.csv - intrinsic connectivity network numbers for each fMRI spatial map; matches FNC names
+
+print(icn_numbers_df.shape)
+
+# train_scores.csv - age and assessment values for train samples
+
+train_scores_df = pd.read_csv(MAIN_DATA_PATH + 'train_scores.csv')
+
+train_scores_df.isna().sum()
+
+train_scores_df['is_train_set'] = 'yes'
+
+print(train_scores_df.shape)
+
+# fnc_features, loading_features = list(fnc_df.columns[1:]), list(loading_df.columns[1:])
+
+df = fnc_df.merge(loading_df, on="Id")
+
+df = df.merge(train_scores_df, on="Id", how="left")
+
+# columns that are sensitive to Site ID (block)
+
+dim_red = ['IC_18', 'IC_20']
+
+# Preparing training df
+train_df = df[df["is_train_set"] == 'yes']
+
+df.isnull().sum()
+train_df.isnull().sum()
+
+
+train_ids = train_df[['Id']]
+train_ids = train_ids.reset_index()
+
+train_df = train_df.drop(['is_train_set', 'Id'], axis=1)
+
+train_col = train_df.columns
+
+train_col
+
+# train_df = train_df.dropna()
+train_df.isnull().sum()
+
+# Imputing missing values in training_df
+
+imputer = KNNImputer(n_neighbors=5)
+train_df = imputer.fit_transform(train_df)
+
+train_df = pd.DataFrame(train_df)
+train_df.columns = train_col
+
+train_df['Id'] = train_ids.Id
+
+train_df.isnull().sum()
+
+# Columns that are sensitive to site
+
+
+
+# Preparing actual test set
+
+target_cols = ['age', 'domain1_var1', 'domain1_var2', 'domain2_var1', 'domain2_var2']
+
+test_df = df[df['is_train_set'] != 'yes']
+
+test_ids = test_df[["Id"]]
+
+test_ids = test_df.reset_index()
+
+actual_test = test_df.drop(target_cols, axis=1)
+actual_test = actual_test.drop(['Id', 'is_train_set'], axis=1)
+actual_test = actual_test.drop(dim_red, axis=1)
+
+X = train_df.drop(target_cols, axis=1)
+X = X.drop('Id', axis=1)
+X = X.drop(dim_red, axis=1)
+
+y = train_df[['age', 'domain1_var1', 'domain1_var2', 'domain2_var1', 'domain2_var2']]
+
+y1 = np.array(y.age, dtype='float64')
+y2 = np.array(y.domain1_var1, dtype='float64')
+y3 = np.array(y.domain1_var2, dtype='float64')
+y4 = np.array(y.domain2_var1, dtype='float64')
+y5 = np.array(y.domain2_var2, dtype='float64')
+
+X1_train, X1_test, y1_train, y1_test = train_test_split(X, y1, test_size=0.05)
+
+
+def build_model(hp):
+    model = keras.Sequential()
+    model.add(layers.Dense(units=hp.Int('input_units',
+                                        min_value=8,
+                                        max_value=512,
+                                        step=8),
+                           activation='relu',
+                           input_shape=[X1_train.shape[1]]))
+    model.add(Dropout(rate=hp.Float('dropout_input',
+                                    min_value=0.0,
+                                    max_value=0.9,
+                                    step=0.05)))
+
+    for i in range(hp.Int('num_layers', 1, 10)):
+        model.add(layers.Dense(units=hp.Int('units_' + str(i),
+                                            min_value=8,
+                                            max_value=512,
+                                            step=8),
+                               activation='relu'))
+        model.add(Dropout(rate=hp.Float('dropout_' + str(i),
+                                        min_value=0.0,
+                                        max_value=0.9,
+                                        step=0.05)))
+
+    lr = hp.Choice('learning_rate', [1e-3, 1e-4, 1e-2])
+    model.compile(optimizer=keras.optimizers.Adam(lr),
+                  loss='mean_absolute_percentage_error', metrics=['mean_absolute_percentage_error'])
+
+    return model
+
+
+tuner1 = RandomSearch(
+    build_model,
+    objective='val_mean_absolute_percentage_error',
+    max_trials=100,
+    executions_per_trial=3,
+    directory=MAIN_DATA_PATH,
+    project_name='neuro_science_tuner16')
+
+tuner1.search(X1_train, y1_train,
+              epochs=50,
+              batch_size=64,
+              validation_data=(X1_test, y1_test))
+
+tuner1.results_summary()
+pickle_out = open("tuner1.pickle", "wb")
+pickle.dump(tuner1, pickle_out)
